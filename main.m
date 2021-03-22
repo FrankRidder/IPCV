@@ -2,7 +2,6 @@
 clear variables
 close all
 
-
 %% Calibration images
 imagesCameraCalibrationLeft = imageSet('pictures/calibration1/calibrationLeft');
 imagesCameraCalibrationMiddle = imageSet('pictures/calibration1/calibrationMiddle');
@@ -14,59 +13,38 @@ subjectMiddle = read(imagesSubject,2);
 subjectRight = read(imagesSubject,3);
 squareSize = 10;
 I = readimage(imagesCameraCalibrationMiddle,1);
-imageSize = [size(I,1),size(I,2)];
-% [params, worldPoints] = calibrateCamera(imagesCameraCalibrationMiddle,imagesCameraCalibrationRight,10);
+% imageSize = [size(I,1),size(I,2)];
+% [params, pairsUsed, worldPoints] = CalibrationMiddleRight();
 % save params params
 % save worldPoints worldPoints
+% [params2, pairsUsed2, worldPoints2] = CalibrationMiddleLeft();
+% save params2 params2
+% save worldPoints2 worldPoints2
 load worldPoints
 load params
-% [params2, worldPoints2] = calibrateCamera(imagesCameraCalibrationMiddle,imagesCameraCalibrationLeft,10);  
-% figure;
-% showExtrinsics(params);
-% % Plot parameters
-% [J,newOrigin] = undistortImage(subjectLeft,params.CameraParameters2);
-% figure; imshowpair(subjectLeft,J,'montage');
+load worldPoints2
+load params2
 
-% imshow(removeBg(subjectMiddle));
-% 
-% imshow(removeBg(subjectLeft));
-% 
-% imshow(removeBg(subjectRight));
-% im = im2double(subjectMiddle);
-% im = (im - mean2(im))./std2(im);
-% imshow(im)
-subjectMiddle = removeBg(subjectMiddle);
-subjectRight = removeBg(subjectRight);
-imshow(subjectRight);
+I1 = subjectMiddle;
+I2 = subjectRight;
+I3 = subjectLeft;
+[matchedPoints1, matchedPoints2] = findFeatures(rgb2gray(I1), rgb2gray(I3));
+
+pcshow(createPointcloud(I1, I2,params,222, 350));
 
 
-[frameLeftRect, frameRightRect] = ...
-    rectifyStereoImages(subjectMiddle, subjectRight, params);
 
-
-disparityMap = disparitySGM(rgb2gray(frameLeftRect), rgb2gray(frameRightRect));
-points3D = reconstructScene(disparityMap,params);
-% Convert to meters and create a pointCloud object
-points3D = points3D./300;
-ptCloud = pointCloud(points3D, 'Color', frameLeftRect);
-
-% Create a streaming point cloud viewer
-player3D = pcplayer([-3, 3], [-3, 3], [0, 8], 'VerticalAxis', 'y', ...
-    'VerticalAxisDir', 'down');
-
-% Visualize the point cloud
-view(player3D, ptCloud);
-
-
-function [params, worldPoints] = calibrateCamera(images1,images2,squareSize)
+function [params, tform, estimationErrors] = calibrateCamera(images1,images2,squareSize)
     I = readimage(images1,1);
     imageSize = [size(I,1),size(I,2)];
     [imagePoints,boardSize] = ...
     detectCheckerboardPoints(images1.Files,images2.Files);
     worldPoints = generateCheckerboardPoints(boardSize,squareSize);
-    params = estimateCameraParameters(imagePoints,worldPoints, ...
+    [params,~, estimationErrors] = estimateCameraParameters(imagePoints,worldPoints, ...
                                   'ImageSize',imageSize);
+
 end
+
 function [removedBgImage] = removeBg(image)
     lab_he = rgb2lab(image);
     ab = lab_he(:,:,2:3);
@@ -74,7 +52,123 @@ function [removedBgImage] = removeBg(image)
     nColors = 10;
     % repeat the clustering 3 times to avoid local minima
     pixel_labels = imsegkmeans(ab,nColors,'NumAttempts',3);
-    mask = pixel_labels==2;
+    mask = pixel_labels==1;
     cluster = image .*uint8(mask);
     removedBgImage=image-cluster;
+end
+
+function [matchedPoints1, matchedPoints2] = findFeatures(I1, I2)
+    points1 = detectHarrisFeatures(I1);
+    points2 = detectHarrisFeatures(I2);
+    [features1,valid_points1] = extractFeatures(I1,points1);
+    [features2,valid_points2] = extractFeatures(I2,points2);
+    indexPairs = matchFeatures(features1,features2);
+    matchedPoints1 = valid_points1(indexPairs(:,1),:);
+    matchedPoints2 = valid_points2(indexPairs(:,2),:);
+end
+
+function [ptCloud] = createPointcloud(I1,I2,params,min,max )
+    I1 = undistortImage(I1,params.CameraParameters1);
+    I2 = undistortImage(I2,params.CameraParameters2);
+    [J1,J2] = rectifyStereoImages(I1,I2,params, ...
+      'OutputView','full');
+%     disparityRange = [222 310];
+    J1Gray=rgb2gray(J1);
+    J2Gray=rgb2gray(J2);
+    
+%     imtool(stereoAnaglyph(J1,J2));
+    disparityMap = disparitySGM(J1Gray,J2Gray,'DisparityRange',[min max],'UniquenessThreshold',20);
+    points3D = reconstructScene(disparityMap, params);
+    ptCloud = pointCloud(points3D, 'Color', removeBg(J1));
+end
+
+function [stereoParams, pairsUsed, worldPoints] = CalibrationMiddleRight()
+imageFileNames1 = {'C:\Users\kopop\Documents\MATLAB\IPCV\pictures\calibration1\calibrationMiddle\Calibratie 1_M_1361.jpg',...
+    'C:\Users\kopop\Documents\MATLAB\IPCV\pictures\calibration1\calibrationMiddle\Calibratie 1_M_1633.jpg',...
+    'C:\Users\kopop\Documents\MATLAB\IPCV\pictures\calibration1\calibrationMiddle\Calibratie 1_M_1769.jpg',...
+    'C:\Users\kopop\Documents\MATLAB\IPCV\pictures\calibration1\calibrationMiddle\Calibratie 1_M_2041.jpg',...
+    'C:\Users\kopop\Documents\MATLAB\IPCV\pictures\calibration1\calibrationMiddle\Calibratie 1_M_2177.jpg',...
+    'C:\Users\kopop\Documents\MATLAB\IPCV\pictures\calibration1\calibrationMiddle\Calibratie 1_M_2449.jpg',...
+    'C:\Users\kopop\Documents\MATLAB\IPCV\pictures\calibration1\calibrationMiddle\Calibratie 1_M_273.jpg',...
+    };
+imageFileNames2 = {'C:\Users\kopop\Documents\MATLAB\IPCV\pictures\calibration1\calibrationRight\Calibratie 1_R_1361.jpg',...
+    'C:\Users\kopop\Documents\MATLAB\IPCV\pictures\calibration1\calibrationRight\Calibratie 1_R_1633.jpg',...
+    'C:\Users\kopop\Documents\MATLAB\IPCV\pictures\calibration1\calibrationRight\Calibratie 1_R_1769.jpg',...
+    'C:\Users\kopop\Documents\MATLAB\IPCV\pictures\calibration1\calibrationRight\Calibratie 1_R_2041.jpg',...
+    'C:\Users\kopop\Documents\MATLAB\IPCV\pictures\calibration1\calibrationRight\Calibratie 1_R_2177.jpg',...
+    'C:\Users\kopop\Documents\MATLAB\IPCV\pictures\calibration1\calibrationRight\Calibratie 1_R_2449.jpg',...
+    'C:\Users\kopop\Documents\MATLAB\IPCV\pictures\calibration1\calibrationRight\Calibratie 1_R_273.jpg',...
+    };
+
+% Detect checkerboards in images
+[imagePoints, boardSize, imagesUsed] = detectCheckerboardPoints(imageFileNames1, imageFileNames2);
+
+% Generate world coordinates of the checkerboard keypoints
+squareSize = 10;  % in units of 'millimeters'
+worldPoints = generateCheckerboardPoints(boardSize, squareSize);
+
+% Read one of the images from the first stereo pair
+I1 = imread(imageFileNames1{1});
+[mrows, ncols, ~] = size(I1);
+
+% Calibrate the camera
+[stereoParams, pairsUsed, estimationErrors] = estimateCameraParameters(imagePoints, worldPoints, ...
+    'EstimateSkew', false, 'EstimateTangentialDistortion', false, ...
+    'NumRadialDistortionCoefficients', 2, 'WorldUnits', 'millimeters', ...
+    'InitialIntrinsicMatrix', [], 'InitialRadialDistortion', [], ...
+    'ImageSize', [mrows, ncols]);
+
+end
+
+
+
+function [stereoParams, pairsUsed, worldPoints] = CalibrationMiddleLeft()
+imageFileNames1 = {'C:\Users\kopop\Documents\MATLAB\IPCV\pictures\calibration1\calibrationMiddle\Calibratie 1_M_1.jpg',...
+    'C:\Users\kopop\Documents\MATLAB\IPCV\pictures\calibration1\calibrationMiddle\Calibratie 1_M_1089.jpg',...
+    'C:\Users\kopop\Documents\MATLAB\IPCV\pictures\calibration1\calibrationMiddle\Calibratie 1_M_1225.jpg',...
+    'C:\Users\kopop\Documents\MATLAB\IPCV\pictures\calibration1\calibrationMiddle\Calibratie 1_M_1361.jpg',...
+    'C:\Users\kopop\Documents\MATLAB\IPCV\pictures\calibration1\calibrationMiddle\Calibratie 1_M_137.jpg',...
+    'C:\Users\kopop\Documents\MATLAB\IPCV\pictures\calibration1\calibrationMiddle\Calibratie 1_M_1497.jpg',...
+    'C:\Users\kopop\Documents\MATLAB\IPCV\pictures\calibration1\calibrationMiddle\Calibratie 1_M_2449.jpg',...
+    'C:\Users\kopop\Documents\MATLAB\IPCV\pictures\calibration1\calibrationMiddle\Calibratie 1_M_2585.jpg',...
+    'C:\Users\kopop\Documents\MATLAB\IPCV\pictures\calibration1\calibrationMiddle\Calibratie 1_M_273.jpg',...
+    'C:\Users\kopop\Documents\MATLAB\IPCV\pictures\calibration1\calibrationMiddle\Calibratie 1_M_409.jpg',...
+    'C:\Users\kopop\Documents\MATLAB\IPCV\pictures\calibration1\calibrationMiddle\Calibratie 1_M_545.jpg',...
+    'C:\Users\kopop\Documents\MATLAB\IPCV\pictures\calibration1\calibrationMiddle\Calibratie 1_M_681.jpg',...
+    'C:\Users\kopop\Documents\MATLAB\IPCV\pictures\calibration1\calibrationMiddle\Calibratie 1_M_817.jpg',...
+    'C:\Users\kopop\Documents\MATLAB\IPCV\pictures\calibration1\calibrationMiddle\Calibratie 1_M_953.jpg',...
+    };
+imageFileNames2 = {'C:\Users\kopop\Documents\MATLAB\IPCV\pictures\calibration1\calibrationLeft\Calibratie 1_L_1.jpg',...
+    'C:\Users\kopop\Documents\MATLAB\IPCV\pictures\calibration1\calibrationLeft\Calibratie 1_L_1089.jpg',...
+    'C:\Users\kopop\Documents\MATLAB\IPCV\pictures\calibration1\calibrationLeft\Calibratie 1_L_1225.jpg',...
+    'C:\Users\kopop\Documents\MATLAB\IPCV\pictures\calibration1\calibrationLeft\Calibratie 1_L_1361.jpg',...
+    'C:\Users\kopop\Documents\MATLAB\IPCV\pictures\calibration1\calibrationLeft\Calibratie 1_L_137.jpg',...
+    'C:\Users\kopop\Documents\MATLAB\IPCV\pictures\calibration1\calibrationLeft\Calibratie 1_L_1497.jpg',...
+    'C:\Users\kopop\Documents\MATLAB\IPCV\pictures\calibration1\calibrationLeft\Calibratie 1_L_2449.jpg',...
+    'C:\Users\kopop\Documents\MATLAB\IPCV\pictures\calibration1\calibrationLeft\Calibratie 1_L_2585.jpg',...
+    'C:\Users\kopop\Documents\MATLAB\IPCV\pictures\calibration1\calibrationLeft\Calibratie 1_L_273.jpg',...
+    'C:\Users\kopop\Documents\MATLAB\IPCV\pictures\calibration1\calibrationLeft\Calibratie 1_L_409.jpg',...
+    'C:\Users\kopop\Documents\MATLAB\IPCV\pictures\calibration1\calibrationLeft\Calibratie 1_L_545.jpg',...
+    'C:\Users\kopop\Documents\MATLAB\IPCV\pictures\calibration1\calibrationLeft\Calibratie 1_L_681.jpg',...
+    'C:\Users\kopop\Documents\MATLAB\IPCV\pictures\calibration1\calibrationLeft\Calibratie 1_L_817.jpg',...
+    'C:\Users\kopop\Documents\MATLAB\IPCV\pictures\calibration1\calibrationLeft\Calibratie 1_L_953.jpg',...
+    };
+
+% Detect checkerboards in images
+[imagePoints, boardSize, imagesUsed] = detectCheckerboardPoints(imageFileNames1, imageFileNames2);
+
+% Generate world coordinates of the checkerboard keypoints
+squareSize = 10;  % in units of 'millimeters'
+worldPoints = generateCheckerboardPoints(boardSize, squareSize);
+
+% Read one of the images from the first stereo pair
+I1 = imread(imageFileNames1{1});
+[mrows, ncols, ~] = size(I1);
+
+% Calibrate the camera
+[stereoParams, pairsUsed, estimationErrors] = estimateCameraParameters(imagePoints, worldPoints, ...
+    'EstimateSkew', false, 'EstimateTangentialDistortion', false, ...
+    'NumRadialDistortionCoefficients', 2, 'WorldUnits', 'millimeters', ...
+    'InitialIntrinsicMatrix', [], 'InitialRadialDistortion', [], ...
+    'ImageSize', [mrows, ncols]);
 end
