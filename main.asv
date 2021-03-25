@@ -31,7 +31,7 @@ I3 = subjectLeft;
 % [matchedPoints1, matchedPoints2] = findFeatures(rgb2gray(I1), rgb2gray(I3));
 
 pcshow(createPointcloud(removeBg(I1,0), removeBg(I2, 1),params,222, 350));
-pcshow(createPointcloud(removeBg(I2,1), removeBg(I1, 0),params2,120, 248));
+% pcshow(createPointcloud(removeBg(I2,1), removeBg(I1, 0),params2,120, 248));
 
 
 
@@ -90,10 +90,10 @@ function [matchedPoints1, matchedPoints2] = findFeatures(I1, I2)
     matchedPoints2 = valid_points2(indexPairs(:,2),:);
 end
 
-function [ptCloud] = createPointcloud(Z1,Z2,stereoParams,min,max )
-    Z1 = undistortImage(Z1,stereoParams.CameraParameters1);
-    Z2 = undistortImage(Z2,stereoParams.CameraParameters2);
-    [J1,J2] = rectifyStereoImages(Z1,Z2,stereoParams, ...
+function [ptCloud] = createPointcloud(I1,I2,stereoParams,min,max )
+    I1 = undistortImage(I1,params.CameraParameters1);
+    I2 = undistortImage(I2,params.CameraParameters2);
+    [J1,J2] = rectifyStereoImages(I1,I2,params, ...
       'OutputView','full');
 %     disparityRange = [222 310];
     J1Gray=rgb2gray(J1);
@@ -101,7 +101,7 @@ function [ptCloud] = createPointcloud(Z1,Z2,stereoParams,min,max )
     
 %     imtool(stereoAnaglyph(J1,J2));
     disparityMap = disparitySGM(J1Gray,J2Gray,'DisparityRange',[min max]);
-    points3D = reconstructScene(disparityMap, stereoParams);
+    points3D = reconstructScene(disparityMap, params);
    
     ptCloud = pcdenoise(pointCloud(points3D, 'Color',  J1));
 
