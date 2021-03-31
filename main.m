@@ -40,50 +40,51 @@ load params4
 %Color normalize over all images
 [subjectLeft,subjectMiddle,subjectRight] = colorNormalization(subjectLeft,subjectMiddle,subjectRight);
 
-subjectLeft = im2double(subjectLeft);
-subjectMiddle = im2double(subjectMiddle);
-subjectRight = im2double(subjectRight);
-
-maskLeft = getBG(subjectLeft, 0);
-maskMiddel = getBG(subjectMiddle, 0);
-maskRight = getBG(subjectRight, 1);
-
-noBGsubjectLeft = times(subjectLeft, maskLeft);
-noBGsubjectMiddle = times(subjectMiddle, maskMiddel);
-noBGsubjectRight = times(subjectRight, maskRight);
-
+%Rectify image with background
 [rectMiddleRight , rectRight] = rectifyStereoImages(subjectMiddle,subjectRight,params, 'OutputView','full');
 [rectLeft, rectMiddleLeft] = rectifyStereoImages(subjectLeft,subjectMiddle,params3, 'OutputView','full'); 
 
+%Rectify image without with background used a mask 
+[NoBGRectMiddleRight , NoBGRectRight] = rectifyStereoImages(removeBG(subjectMiddle, 0),removeBG(subjectRight, 1),params, 'OutputView','full');
+[NoBGRectLeft, NoBGRectMiddleLeft] = rectifyStereoImages(removeBG(subjectLeft, 0),removeBG(subjectMiddle, 0),params3, 'OutputView','full');
 
-[NoBGRectMiddleRight , NoBGRectRight] = rectifyStereoImages(noBGsubjectMiddle,noBGsubjectRight,params, 'OutputView','full');
-[NoBGRectLeft, NoBGRectMiddleLeft] = rectifyStereoImages(noBGsubjectLeft,noBGsubjectMiddle,params3, 'OutputView','full');
+%Create the pointcloud using a disparity map and return unreliable points
+[ptCloud1, unreliables1]  = createPointcloud(rectMiddleRight, rectRight,params,222, 350, NoBGRectMiddleRight);
+[ptCloud2, unreliables2]  = createPointcloud(rectLeft,rectMiddleLeft,params3, 222, 350, NoBGRectLeft);
 
-ptCloud1 = createPointcloud(rectMiddleRight, rectRight,params,222, 350, NoBGRectMiddleRight);
-ptCloud2 = createPointcloud(rectLeft,rectMiddleLeft,params3, 222, 350, NoBGRectLeft);
+figure; imshow(unreliables1);
+figure; imshow(unreliables2);
 
 figure; pcshow(ptCloud1);
 figure; pcshow(ptCloud2);
 
 
-gridSize = 0.1;
-fixed = pcdownsample(ptCloud1, 'gridAverage', gridSize);
-moving = pcdownsample(ptCloud2, 'gridAverage', gridSize);
-tform = pcregistericp(moving, fixed,'Extrapolate', true);
-
-ptCloudAligned = pctransform(ptCloud2,tform);
-pcshowpair(ptCloudAligned, ptCloud1)
+% gridSize = 0.1;
+% fixed = pcdownsample(ptCloud1, 'gridAverage', gridSize);
+% moving = pcdownsample(ptCloud2, 'gridAverage', gridSize);
+% tform = pcregistericp(moving, fixed,'Extrapolate', true);
+% 
+% ptCloudAligned = pctransform(ptCloud2,tform);
+% pcshowpair(ptCloudAligned, ptCloud1)
 
 %% Create point cloud
-function [ptCloud] = createPointcloud(J1,J2,stereoParams,min,max, mask)
+function [ptCloud, unreliables] = createPointcloud(J1,J2,stereoParams,min,max, mask)
     J1Gray=rgb2gray(J1);
     J2Gray=rgb2gray(J2);
 %   imtool(stereoAnaglyph(J1,J2));
     disparityMap = disparitySGM(J1Gray,J2Gray,'DisparityRange',[min max],'UniquenessThreshold',5);
     
+    %Make the make logical to remove it from the disparity map
     mask = rgb2gray(mask);
     mask = imbinarize(mask, 0);
     disparityMap = times(disparityMap, mask);
+    
+    % Create array size of the disparity map and set all values to one
+    unreliables = ones(size(disparityMap));
+    %Set the usefull point to zero
+    unreliables(find(disparityMap~=0)) = 0;
+    %unreliables are set to nan by disparitySGM
+    unreliables(find(isnan(disparityMap))) = 1;
     
     figure;
     imshow(disparityMap,[min max]);
@@ -92,8 +93,8 @@ function [ptCloud] = createPointcloud(J1,J2,stereoParams,min,max, mask)
     colorbar;
     
     points3D = reconstructScene(disparityMap, stereoParams);
-    ptCloud = pcdenoise(pointCloud(points3D, 'Color',  J1));
-
+    ptCloud = pcdenoise(pointCloud(points3D, 'Color',  J1));  
+    
 
 end
 %% Calibrate Camera
@@ -107,29 +108,50 @@ function [params, tform, estimationErrors] = calibrateCamera(images1,images2,squ
                                   'ImageSize',imageSize);
 
 end
-%% Remove background
-function [filled] = getBG(image, right)
+
+% This function returns a image without the background
+function [removedBgImage] = removeBG(image, right)
     image = im2double(image);
+
+    %Normalize the image
     imageNorm = (image - mean2(image))./std2(image);
+    %Set image to grey scale
     imageGrey = rgb2gray(imageNorm);
-    se = strel('diamond',1);
+    
+    %Use canny edge detection to get the edges of the person
     utCanny = ut_edge(imageGrey, 'canny', 'sigma', 3, 'hysteresis', [0.06 0.005]);
+    
+    %Use dilation to connect the edges
+    se = strel('diamond',1);
     utCanny = imdilate(utCanny,se);
+
+    %Pad the image according to how the image looks
+    %This is used to be able to fill the image, imfill does not fill if the
+    %edge is not fully connected. This also means that it does not fill if
+    %it is connected to the image border
     if right == 1
         utCanny = padarray(utCanny,[1 1],1,'post');
     else 
         utCanny = padarray(padarray(utCanny,[1 1],1,'post'),[0 1],1,'pre');
     end
+    %Fill the padded image
     filled = imfill(utCanny,'holes');
+    
+    %Remove the padding
     if right == 1
         filled = filled(1:end-1,1:end-1);
     else 
         filled = filled(1:end-1,2:end-1);
     end
+    
+    removedBgImage = times(image,filled);
 end
 
-function [I1,I2,I3] = colorNormalization(I1,I2,I3)
 
+%This function get the mean of every color channel and calculates the over
+%3 images and calculates a normalized image using these mains
+function [I1,I2,I3] = colorNormalization(I1,I2,I3)
+%Get the color channels
 redChannel1 = I1(:, :, 1);
 greenChannel1 = I1(:, :, 2);
 blueChannel1 = I1(:, :, 3);
@@ -139,7 +161,7 @@ blueChannel2 = I2(:, :, 3);
 redChannel3 = I3(:, :, 1);
 greenChannel3 = I3(:, :, 2);
 blueChannel3 = I3(:, :, 3);
-
+%Get the means of color channels
 meanR1 = mean2(redChannel1);
 meanG1 = mean2(greenChannel1);
 meanB1 = mean2(blueChannel1);
@@ -150,10 +172,12 @@ meanR3 = mean2(redChannel3);
 meanG3 = mean2(greenChannel3);
 meanB3 = mean2(blueChannel3);
 
+%Calc the means of color channels across the images
 desiredMeanR = mean([meanR1, meanR2, meanR3]);
 desiredMeanG = mean([meanG1, meanG2, meanG3]);
 desiredMeanB = mean([meanB1, meanB2, meanB3]);
 
+%Calc a factor for every image to normalize the color
 correctionFactorR1 = desiredMeanR / meanR1;
 correctionFactorG1 = desiredMeanG / meanG1;
 correctionFactorB1 = desiredMeanB / meanB1;
@@ -166,25 +190,23 @@ correctionFactorR3 = desiredMeanR / meanR3;
 correctionFactorG3 = desiredMeanG / meanG3;
 correctionFactorB3 = desiredMeanB / meanB3;
 
+%Normalize every color channel of every image and combine
 redChannel = uint8(single(redChannel1) * correctionFactorR1);
 greenChannel = uint8(single(greenChannel1) * correctionFactorG1);
 blueChannel = uint8(single(blueChannel1) * correctionFactorB1);
 % Recombine into an RGB image
-% Recombine separate color channels into a single, true color RGB image.
 I1 = cat(3, redChannel, greenChannel, blueChannel);
 
 redChannel = uint8(single(redChannel2) * correctionFactorR2);
 greenChannel = uint8(single(greenChannel2) * correctionFactorG2);
 blueChannel = uint8(single(blueChannel2) * correctionFactorB2);
 % Recombine into an RGB image
-% Recombine separate color channels into a single, true color RGB image.
 I2 = cat(3, redChannel, greenChannel, blueChannel);
 
 redChannel = uint8(single(redChannel3) * correctionFactorR3);
 greenChannel = uint8(single(greenChannel3) * correctionFactorG3);
 blueChannel = uint8(single(blueChannel3) * correctionFactorB3);
 % Recombine into an RGB image
-% Recombine separate color channels into a single, true color RGB image.
 I3 = cat(3, redChannel, greenChannel, blueChannel);
 
 end
