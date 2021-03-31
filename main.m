@@ -35,12 +35,21 @@ I1 = subjectMiddle;
 I2 = subjectRight;
 I3 = subjectLeft;
 
-ptCloud1 = pcdenoise(createPointcloud(removeBg(I1,0), removeBg(I2, 1),params,222, 350));
-ptCloud2 =pcdenoise(createPointcloud(removeBg(I3,0), removeBg(I1, 0),params3,222, 350));
+ptCloud = pcdenoise(createPointcloud(I1, I2,params,222, 350));
+ptCloud2 =createPointcloud(I3, I1, params3,222, 350);
+pcshow(ptCloud);
+pcshowpair(ptCloud, ptCloud2)
 
-pcshow(ptCloud2);
-% pcshow(ptCloud1);
-
+gridSize = 0.0001;
+% ptCloud = pcdownsample(ptCloud, 'gridAverage', gridSize);
+x= double(ptCloud.Location(:, 1));
+y= double(ptCloud.Location(:, 2));
+%     z= double(ptCloud.Location(:, 3).');
+z= double(ptCloud.Location(:, 3));
+% shp = boundary(x,y,z,1);
+% trisurf(shp)
+%     tri = delaunay(x, y);
+%     trimesh(tri, x, y, z);
 % gridSize = 0.1;
 % fixed = pcdownsample(ptCloud1, 'gridAverage', gridSize);
 % moving = pcdownsample(ptCloud2, 'gridAverage', gridSize);
@@ -58,9 +67,16 @@ function [ptCloud] = createPointcloud(Z1,Z2,stereoParams,min,max )
     J1Gray=rgb2gray(J1);
     J2Gray=rgb2gray(J2);
 %   imtool(stereoAnaglyph(J1,J2));
-    disparityMap = disparitySGM(J1Gray,J2Gray,'DisparityRange',[min max],'UniquenessThreshold',5);
+    disparityMap = disparitySGM(imgaussfilt(histeq(J1Gray)),imgaussfilt(histeq(J2Gray)),'DisparityRange',[min max],'UniquenessThreshold',10);
     points3D = reconstructScene(disparityMap, stereoParams);
-    ptCloud = pcdenoise(pointCloud(points3D, 'Color',  J1));
+    ptCloud = pcdenoise(removeInvalidPoints(pointCloud(points3D, 'Color', J1)));
+ 
+  
+
+% 
+% 
+% z
+% k =boundary(real(x),real(y),real(z));
 
 
 end
