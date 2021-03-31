@@ -71,7 +71,7 @@ tform2 = rigid3d(rot,trans);
 
 ptCloudRef = pctransform(ptCloud1,tform);
 ptCloudCurrent =pctransform(ptCloud2,tform2);
-gridSize = 0.1;
+gridSize = 10;
 fixed = pcdownsample(ptCloudRef, 'gridAverage', gridSize);
 moving = pcdownsample(ptCloudCurrent, 'gridAverage', gridSize);
 tform = pcregistericp(moving, fixed, 'Metric','pointToPoint','Extrapolate', true);
