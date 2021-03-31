@@ -36,37 +36,49 @@ load worldPoints3
 load params3
 load worldPoints4
 load params4
-
+showExtrinsics(params3);
 %Color normalize over all images
 [subjectLeft,subjectMiddle,subjectRight] = colorNormalization(subjectLeft,subjectMiddle,subjectRight);
 
 %Rectify image with background
-[rectMiddleRight , rectRight] = rectifyStereoImages(subjectMiddle,subjectRight,params, 'OutputView','full');
+[rectMiddleRight , rectRight] = rectifyStereoImages(subjectMiddle,subjectRight,params,'OutputView','full');
 [rectLeft, rectMiddleLeft] = rectifyStereoImages(subjectLeft,subjectMiddle,params3, 'OutputView','full'); 
 
 %Rectify image without with background used a mask 
-[NoBGRectMiddleRight , NoBGRectRight] = rectifyStereoImages(removeBG(subjectMiddle, 0),removeBG(subjectRight, 1),params, 'OutputView','full');
+[NoBGRectMiddleRight , NoBGRectRight] = rectifyStereoImages(removeBG(subjectMiddle, 0),removeBG(subjectRight, 1),params,'OutputView','full');
 [NoBGRectLeft, NoBGRectMiddleLeft] = rectifyStereoImages(removeBG(subjectLeft, 0),removeBG(subjectMiddle, 0),params3, 'OutputView','full');
 
 %Create the pointcloud using a disparity map and return unreliable points
-[ptCloud1, unreliables1]  = createPointcloud(rectMiddleRight, rectRight,params,222, 350, NoBGRectMiddleRight);
-[ptCloud2, unreliables2]  = createPointcloud(rectLeft,rectMiddleLeft,params3, 222, 350, NoBGRectLeft);
+[ptCloud1, unreliables1]  = createPointcloud(rectMiddleRight, rectRight,params,240, 368, NoBGRectMiddleRight);
+[ptCloud2, unreliables2]  = createPointcloud(rectLeft,rectMiddleLeft,params3, 240, 368, NoBGRectLeft);
 
-figure; imshow(unreliables1);
-figure; imshow(unreliables2);
+% figure; imshow(unreliables1);
+% figure; imshow(unreliables2);
 
 figure; pcshow(ptCloud1);
 figure; pcshow(ptCloud2);
 
+% Tranform according to the camera parameters to make it easier of the
+% algorithm to line up
+trans = params2.TranslationOfCamera2;
+rot = params2.RotationOfCamera2;
+tform = rigid3d(rot,trans);
 
-% gridSize = 0.1;
-% fixed = pcdownsample(ptCloud1, 'gridAverage', gridSize);
-% moving = pcdownsample(ptCloud2, 'gridAverage', gridSize);
-% tform = pcregistericp(moving, fixed,'Extrapolate', true);
-% 
-% ptCloudAligned = pctransform(ptCloud2,tform);
-% pcshowpair(ptCloudAligned, ptCloud1)
+trans = params.TranslationOfCamera2;
+rot = params.RotationOfCamera2;
+tform2 = rigid3d(rot,trans);
 
+
+ptCloudRef = pctransform(ptCloud1,tform);
+ptCloudCurrent =pctransform(ptCloud2,tform2);
+gridSize = 0.1;
+fixed = pcdownsample(ptCloudRef, 'gridAverage', gridSize);
+moving = pcdownsample(ptCloudCurrent, 'gridAverage', gridSize);
+tform = pcregistericp(moving, fixed, 'Metric','pointToPoint','Extrapolate', true);
+ptCloudAligned = pctransform(ptCloudCurrent,tform);
+figure;pcshowpair(ptCloudAligned, ptCloudRef);
+ptCloudOut = pcmerge(ptCloudAligned, ptCloudRef, 1);
+figure;pcshow(ptCloudOut)
 %% Create point cloud
 function [ptCloud, unreliables] = createPointcloud(J1,J2,stereoParams,min,max, mask)
     J1Gray=rgb2gray(J1);
@@ -86,12 +98,12 @@ function [ptCloud, unreliables] = createPointcloud(J1,J2,stereoParams,min,max, m
     %unreliables are set to nan by disparitySGM
     unreliables(find(isnan(disparityMap))) = 1;
     
-    figure;
-    imshow(disparityMap,[min max]);
-    title('Disparity Map');
-    colormap jet;
-    colorbar;
-    
+%     figure;
+%     imshow(disparityMap,[min max]);
+%     title('Disparity Map');
+%     colormap jet;
+%     colorbar;
+%     
     points3D = reconstructScene(disparityMap, stereoParams);
     ptCloud = pcdenoise(pointCloud(points3D, 'Color',  J1));  
     
