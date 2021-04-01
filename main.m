@@ -55,6 +55,7 @@ showExtrinsics(params3);
 % figure; imshow(unreliables1);
 % figure; imshow(unreliables2);
 
+
 figure; pcshow(ptCloud1);
 figure; pcshow(ptCloud2);
 
@@ -106,7 +107,6 @@ function [ptCloud, unreliables] = createPointcloud(J1,J2,stereoParams,min,max, m
 %     
     points3D = reconstructScene(disparityMap, stereoParams);
     ptCloud = pcdenoise(pointCloud(points3D, 'Color',  J1));  
-    
 
 end
 %% Calibrate Camera
