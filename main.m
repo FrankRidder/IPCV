@@ -1,4 +1,3 @@
-%% Amazing code here
 clear variables;
 close all;
 clc;
@@ -7,6 +6,7 @@ clc;
 imagesCameraCalibrationLeft = imageSet('pictures/calibration1/calibrationLeft');
 imagesCameraCalibrationMiddle = imageSet('pictures/calibration1/calibrationMiddle');
 imagesCameraCalibrationRight = imageSet('pictures/calibration1/calibrationRight');
+
 %% Subject 1
 imagesSubject = imageSet('pictures/subject');
 subjectLeft = read(imagesSubject,1);
@@ -36,13 +36,15 @@ load worldPoints3
 load params3
 load worldPoints4
 load params4
-showExtrinsics(params3);
+
+%showExtrinsics(params3);
 %Color normalize over all images
 [subjectLeft,subjectMiddle,subjectRight] = colorNormalization(subjectLeft,subjectMiddle,subjectRight);
 
 %Rectify image with background
 [rectMiddleRight , rectRight] = rectifyStereoImages(subjectMiddle,subjectRight,params,'OutputView','full');
-[rectLeft, rectMiddleLeft] = rectifyStereoImages(subjectLeft,subjectMiddle,params3, 'OutputView','full'); 
+[rectLeft, rectMiddleLeft] = rectifyStereoImages(subjectLeft,subjectMiddle,params3, 'OutputView','full');
+
 
 %Rectify image without with background used a mask 
 [NoBGRectMiddleRight , NoBGRectRight] = rectifyStereoImages(removeBG(subjectMiddle, 0),removeBG(subjectRight, 1),params,'OutputView','full');
@@ -55,9 +57,8 @@ showExtrinsics(params3);
 % figure; imshow(unreliables1);
 % figure; imshow(unreliables2);
 
-
-figure; pcshow(ptCloud1);
-figure; pcshow(ptCloud2);
+%figure; pcshow(ptCloud1);
+%figure; pcshow(ptCloud2);
 
 % Tranform according to the camera parameters to make it easier of the
 % algorithm to line up
@@ -69,19 +70,24 @@ trans = params.TranslationOfCamera2;
 rot = params.RotationOfCamera2;
 tform2 = rigid3d(rot,trans);
 
-
 ptCloudRef = pctransform(ptCloud1,tform);
 ptCloudCurrent =pctransform(ptCloud2,tform2);
+
+%Align pointclouds using ICP
 gridSize = 10;
 fixed = pcdownsample(ptCloudRef, 'gridAverage', gridSize);
 moving = pcdownsample(ptCloudCurrent, 'gridAverage', gridSize);
 tform = pcregistericp(moving, fixed, 'Metric','pointToPoint','Extrapolate', true);
+
+%Adjust pointcloud using tform gotten using ICP
 ptCloudAligned = pctransform(ptCloudCurrent,tform);
 figure;pcshowpair(ptCloudAligned, ptCloudRef);
+
+%Merge pointclouds
 ptCloudOut = pcmerge(ptCloudAligned, ptCloudRef, 1);
 figure;pcshow(ptCloudOut);
 
-% start making mesh beginning
+% Start making mesh beginning
 ptCloudOut = pcdownsample(ptCloudOut, 'gridAverage', gridSize);
 x = double(ptCloudOut.Location(:,1));
 y = double(ptCloudOut.Location(:,2));
@@ -93,10 +99,12 @@ trisurf(trimesh,x,y,z);
 function [ptCloud, unreliables] = createPointcloud(J1,J2,stereoParams,min,max, mask)
     J1Gray=rgb2gray(J1);
     J2Gray=rgb2gray(J2);
-%   imtool(stereoAnaglyph(J1,J2));
+    %imtool(stereoAnaglyph(J1,J2));
+    
+    %Create disparity map
     disparityMap = disparitySGM(J1Gray,J2Gray,'DisparityRange',[min max],'UniquenessThreshold',5);
     
-    %Make the make logical to remove it from the disparity map
+    %Make the mask logical to remove it from the disparity map
     mask = rgb2gray(mask);
     mask = imbinarize(mask, 0);
     disparityMap = times(disparityMap, mask);
@@ -107,18 +115,25 @@ function [ptCloud, unreliables] = createPointcloud(J1,J2,stereoParams,min,max, m
     unreliables(find(disparityMap~=0)) = 0;
     %unreliables are set to nan by disparitySGM
     unreliables(find(isnan(disparityMap))) = 1;
+   
+    % Replace NaN values to remove holes in the disparity map
+    disparityMap(isnan(disparityMap))= -realmax('single');
+    disparityMap = imfill(disparityMap,'holes');
     
-%     figure;
-%     imshow(disparityMap,[min max]);
-%     title('Disparity Map');
-%     colormap jet;
-%     colorbar;
-%     
+    %remove outliers using median filter
+    disparityMap = medfilt2(disparityMap, [75,75]);
+    
+    %figure;
+    %imshow(disparityMap,[min max]);
+    %title('Disparity Map');
+    %colormap jet;
+    %colorbar;
+     
     points3D = reconstructScene(disparityMap, stereoParams);
-    ptCloud = pcdenoise(pointCloud(points3D, 'Color',  J1));  
-
+    
+    ptCloud = pcdenoise(pointCloud(points3D, 'Color',  J1));
 end
-%% Calibrate Camera
+%% Calibrate Camera unused function
 function [params, tform, estimationErrors] = calibrateCamera(images1,images2,squareSize)
     I = readimage(images1,1);
     imageSize = [size(I,1),size(I,2)];
@@ -172,63 +187,64 @@ end
 %This function get the mean of every color channel and calculates the over
 %3 images and calculates a normalized image using these mains
 function [I1,I2,I3] = colorNormalization(I1,I2,I3)
-%Get the color channels
-redChannel1 = I1(:, :, 1);
-greenChannel1 = I1(:, :, 2);
-blueChannel1 = I1(:, :, 3);
-redChannel2 = I2(:, :, 1);
-greenChannel2 = I2(:, :, 2);
-blueChannel2 = I2(:, :, 3);
-redChannel3 = I3(:, :, 1);
-greenChannel3 = I3(:, :, 2);
-blueChannel3 = I3(:, :, 3);
-%Get the means of color channels
-meanR1 = mean2(redChannel1);
-meanG1 = mean2(greenChannel1);
-meanB1 = mean2(blueChannel1);
-meanR2 = mean2(redChannel2);
-meanG2 = mean2(greenChannel2);
-meanB2 = mean2(blueChannel2);
-meanR3 = mean2(redChannel3);
-meanG3 = mean2(greenChannel3);
-meanB3 = mean2(blueChannel3);
 
-%Calc the means of color channels across the images
-desiredMeanR = mean([meanR1, meanR2, meanR3]);
-desiredMeanG = mean([meanG1, meanG2, meanG3]);
-desiredMeanB = mean([meanB1, meanB2, meanB3]);
+    %Get the color channels
+    redChannel1 = I1(:, :, 1);
+    greenChannel1 = I1(:, :, 2);
+    blueChannel1 = I1(:, :, 3);
+    redChannel2 = I2(:, :, 1);
+    greenChannel2 = I2(:, :, 2);
+    blueChannel2 = I2(:, :, 3);
+    redChannel3 = I3(:, :, 1);
+    greenChannel3 = I3(:, :, 2);
+    blueChannel3 = I3(:, :, 3);
+    %Get the means of color channels
+    meanR1 = mean2(redChannel1);
+    meanG1 = mean2(greenChannel1);
+    meanB1 = mean2(blueChannel1);
+    meanR2 = mean2(redChannel2);
+    meanG2 = mean2(greenChannel2);
+    meanB2 = mean2(blueChannel2);
+    meanR3 = mean2(redChannel3);
+    meanG3 = mean2(greenChannel3);
+    meanB3 = mean2(blueChannel3);
 
-%Calc a factor for every image to normalize the color
-correctionFactorR1 = desiredMeanR / meanR1;
-correctionFactorG1 = desiredMeanG / meanG1;
-correctionFactorB1 = desiredMeanB / meanB1;
+    %Calc the means of color channels across the images
+    desiredMeanR = mean([meanR1, meanR2, meanR3]);
+    desiredMeanG = mean([meanG1, meanG2, meanG3]);
+    desiredMeanB = mean([meanB1, meanB2, meanB3]);
 
-correctionFactorR2 = desiredMeanR / meanR2;
-correctionFactorG2 = desiredMeanG / meanG2;
-correctionFactorB2 = desiredMeanB / meanB2;
+    %Calc a factor for every image to normalize the color
+    correctionFactorR1 = desiredMeanR / meanR1;
+    correctionFactorG1 = desiredMeanG / meanG1;
+    correctionFactorB1 = desiredMeanB / meanB1;
 
-correctionFactorR3 = desiredMeanR / meanR3;
-correctionFactorG3 = desiredMeanG / meanG3;
-correctionFactorB3 = desiredMeanB / meanB3;
+    correctionFactorR2 = desiredMeanR / meanR2;
+    correctionFactorG2 = desiredMeanG / meanG2;
+    correctionFactorB2 = desiredMeanB / meanB2;
 
-%Normalize every color channel of every image and combine
-redChannel = uint8(single(redChannel1) * correctionFactorR1);
-greenChannel = uint8(single(greenChannel1) * correctionFactorG1);
-blueChannel = uint8(single(blueChannel1) * correctionFactorB1);
-% Recombine into an RGB image
-I1 = cat(3, redChannel, greenChannel, blueChannel);
+    correctionFactorR3 = desiredMeanR / meanR3;
+    correctionFactorG3 = desiredMeanG / meanG3;
+    correctionFactorB3 = desiredMeanB / meanB3;
 
-redChannel = uint8(single(redChannel2) * correctionFactorR2);
-greenChannel = uint8(single(greenChannel2) * correctionFactorG2);
-blueChannel = uint8(single(blueChannel2) * correctionFactorB2);
-% Recombine into an RGB image
-I2 = cat(3, redChannel, greenChannel, blueChannel);
+    %Normalize every color channel of every image and combine
+    redChannel = uint8(single(redChannel1) * correctionFactorR1);
+    greenChannel = uint8(single(greenChannel1) * correctionFactorG1);
+    blueChannel = uint8(single(blueChannel1) * correctionFactorB1);
+    % Recombine into an RGB image
+    I1 = cat(3, redChannel, greenChannel, blueChannel);
 
-redChannel = uint8(single(redChannel3) * correctionFactorR3);
-greenChannel = uint8(single(greenChannel3) * correctionFactorG3);
-blueChannel = uint8(single(blueChannel3) * correctionFactorB3);
-% Recombine into an RGB image
-I3 = cat(3, redChannel, greenChannel, blueChannel);
+    redChannel = uint8(single(redChannel2) * correctionFactorR2);
+    greenChannel = uint8(single(greenChannel2) * correctionFactorG2);
+    blueChannel = uint8(single(blueChannel2) * correctionFactorB2);
+    % Recombine into an RGB image
+    I2 = cat(3, redChannel, greenChannel, blueChannel);
+
+    redChannel = uint8(single(redChannel3) * correctionFactorR3);
+    greenChannel = uint8(single(greenChannel3) * correctionFactorG3);
+    blueChannel = uint8(single(blueChannel3) * correctionFactorB3);
+    % Recombine into an RGB image
+    I3 = cat(3, redChannel, greenChannel, blueChannel);
 
 end
 
