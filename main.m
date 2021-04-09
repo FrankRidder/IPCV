@@ -88,11 +88,11 @@ ptCloudOut = pcmerge(ptCloudAligned, ptCloudRef, 1);
 figure;pcshow(ptCloudOut);
 % 
 % Start making mesh beginning
-% ptCloudOut = pcdownsample(ptCloudOut, 'gridAverage', gridSize);
-% x = double(ptCloudOut.Location(:,1));
-% y = double(ptCloudOut.Location(:,2));
-% z = double(ptCloudOut.Location(:,3));
-% 
+ptCloudOut = pcdownsample(ptCloudOut, 'gridAverage', gridSize);
+x = double(ptCloudOut.Location(:,1));
+y = double(ptCloudOut.Location(:,2));
+z = double(ptCloudOut.Location(:,3));
+
 % xmin = min(x);
 % xmax = max(x);
 % ymin = min(y);
@@ -104,27 +104,40 @@ figure;pcshow(ptCloudOut);
 % yu = linspace(ymin, ymax, N);         % Uniform y-coordinates
 % [X, Y] = meshgrid(xu, yu);            % Create meshes for xu and yu
 % Z = F(X, Y);
-% Z( Z> 730)=nan;
-% X( Z> 730)=nan;
-% Y( Z> 730)=nan;
+% % Z( Z> 730)=nan;
+% % X( Z> 730)=nan;
+% % Y( Z> 730)=nan;
 % h = surf(X, Y, Z,NoBGRectRight, ...  % Plot surface
 %          'FaceColor', 'texturemap', ...
 %          'EdgeColor', 'none');
 % ptCloudOut = pcmerge(ptCloudAligned, ptCloudRef, 1);
 % figure;pcshow(ptCloudOut);
-ptCloudOut = pcdownsample(ptCloudOut, 'gridAverage', gridSize);
+% ptCloudOut = pcdownsample(ptCloudOut, 'gridAverage', gridSize);
 x = double(ptCloudOut.Location(:,1));
 y = double(ptCloudOut.Location(:,2));
 z = double(ptCloudOut.Location(:,3));
 trimesh = delaunay(x,y);
+trimesh2 = delaunay(x,y,z);
+point1 = trimesh(:,1); % x,y,z 1
+point2 = trimesh(:,2); % x,y,z 2
+point3 = trimesh(:,3); % x,y,z 3
 % d = pdist2(x,y) ;
-
-% Get delta x and delta y.
-% Find distances between vertices
-
-% trimesh(trimesh(:,1)>3600)= nan
-% trimesh(trimesh(:,2)>3600)= nan
-% trimesh(trimesh(:,3)>3600)= nan
+for c = 1:size(point1)
+    A= [x(point1(c)),y(point1(c))];
+    B= [x(point2(c)),y(point2(c))];
+    C= [x(point3(c)),y(point3(c))];
+    if norm(A-B)>25
+        trimesh(c,:)=[nan nan nan];
+    end
+    if  norm(B-C)>25
+        trimesh(c,:)=[nan nan nan];
+    end
+    if  norm(A-C)>25
+        trimesh(c,:)=[nan nan nan];
+    end
+end
+trimesh = rmmissing(trimesh);
+triplot(trimesh,x,y)
 surf = trisurf(trimesh,x,y,z);
 %% Create point cloud
 function [ptCloud, unreliables] = createPointcloud(J1,J2,stereoParams,min,max, mask)
