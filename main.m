@@ -88,7 +88,7 @@ ptCloudOut = pcmerge(ptCloudAligned, ptCloudRef, 1);
 figure;pcshow(ptCloudOut);
 % 
 % Start making mesh beginning
-ptCloudOut = pcdownsample(ptCloudOut, 'gridAverage', gridSize);
+% ptCloudOut = pcdownsample(ptCloudOut, 'gridAverage', gridSize);
 x = double(ptCloudOut.Location(:,1));
 y = double(ptCloudOut.Location(:,2));
 z = double(ptCloudOut.Location(:,3));
@@ -139,6 +139,7 @@ end
 trimesh = rmmissing(trimesh);
 triplot(trimesh,x,y)
 surf = trisurf(trimesh,x,y,z);
+shading interp
 %% Create point cloud
 function [ptCloud, unreliables] = createPointcloud(J1,J2,stereoParams,min,max, mask)
     J1Gray=rgb2gray(J1);
