@@ -83,18 +83,49 @@ tform = pcregistericp(moving, fixed, 'Metric','pointToPoint','Extrapolate', true
 ptCloudAligned = pctransform(ptCloudCurrent,tform);
 figure;pcshowpair(ptCloudAligned, ptCloudRef);
 
-%Merge pointclouds
+% %Merge pointclouds
 ptCloudOut = pcmerge(ptCloudAligned, ptCloudRef, 1);
 figure;pcshow(ptCloudOut);
-
+% 
 % Start making mesh beginning
+% ptCloudOut = pcdownsample(ptCloudOut, 'gridAverage', gridSize);
+% x = double(ptCloudOut.Location(:,1));
+% y = double(ptCloudOut.Location(:,2));
+% z = double(ptCloudOut.Location(:,3));
+% 
+% xmin = min(x);
+% xmax = max(x);
+% ymin = min(y);
+% ymax = max(y);
+% N = 100;  % Number of y values in uniform grid
+% M = 100;  % Number of x values in uniform grid
+% F = TriScatteredInterp(x(:), y(:), z(:));  % Create interpolant
+% xu = linspace(xmin, xmax, M);         % Uniform x-coordinates
+% yu = linspace(ymin, ymax, N);         % Uniform y-coordinates
+% [X, Y] = meshgrid(xu, yu);            % Create meshes for xu and yu
+% Z = F(X, Y);
+% Z( Z> 730)=nan;
+% X( Z> 730)=nan;
+% Y( Z> 730)=nan;
+% h = surf(X, Y, Z,NoBGRectRight, ...  % Plot surface
+%          'FaceColor', 'texturemap', ...
+%          'EdgeColor', 'none');
+% ptCloudOut = pcmerge(ptCloudAligned, ptCloudRef, 1);
+% figure;pcshow(ptCloudOut);
 ptCloudOut = pcdownsample(ptCloudOut, 'gridAverage', gridSize);
 x = double(ptCloudOut.Location(:,1));
 y = double(ptCloudOut.Location(:,2));
 z = double(ptCloudOut.Location(:,3));
 trimesh = delaunay(x,y);
-trisurf(trimesh,x,y,z);
+% d = pdist2(x,y) ;
 
+% Get delta x and delta y.
+% Find distances between vertices
+
+% trimesh(trimesh(:,1)>3600)= nan
+% trimesh(trimesh(:,2)>3600)= nan
+% trimesh(trimesh(:,3)>3600)= nan
+surf = trisurf(trimesh,x,y,z);
 %% Create point cloud
 function [ptCloud, unreliables] = createPointcloud(J1,J2,stereoParams,min,max, mask)
     J1Gray=rgb2gray(J1);
