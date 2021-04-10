@@ -72,72 +72,41 @@ tform2 = rigid3d(rot,trans);
 
 ptCloudRef = pctransform(ptCloud1,tform);
 ptCloudCurrent =pctransform(ptCloud2,tform2);
-
+pcshow(ptCloudRef)
 %Align pointclouds using ICP
 gridSize = 10;
 fixed = pcdownsample(ptCloudRef, 'gridAverage', gridSize);
 moving = pcdownsample(ptCloudCurrent, 'gridAverage', gridSize);
 tform = pcregistericp(moving, fixed, 'Metric','pointToPoint','Extrapolate', true);
-
+pcshow(fixed);
 %Adjust pointcloud using tform gotten using ICP
 ptCloudAligned = pctransform(ptCloudCurrent,tform);
 figure;pcshowpair(ptCloudAligned, ptCloudRef);
 
 % %Merge pointclouds
 ptCloudOut = pcmerge(ptCloudAligned, ptCloudRef, 1);
-figure;pcshow(ptCloudOut);
+pcshow(ptCloudOut);
 % 
 % Start making mesh beginning
-% ptCloudOut = pcdownsample(ptCloudOut, 'gridAverage', gridSize);
-x = double(ptCloudOut.Location(:,1));
-y = double(ptCloudOut.Location(:,2));
-z = double(ptCloudOut.Location(:,3));
-
-% xmin = min(x);
-% xmax = max(x);
-% ymin = min(y);
-% ymax = max(y);
-% N = 100;  % Number of y values in uniform grid
-% M = 100;  % Number of x values in uniform grid
-% F = TriScatteredInterp(x(:), y(:), z(:));  % Create interpolant
-% xu = linspace(xmin, xmax, M);         % Uniform x-coordinates
-% yu = linspace(ymin, ymax, N);         % Uniform y-coordinates
-% [X, Y] = meshgrid(xu, yu);            % Create meshes for xu and yu
-% Z = F(X, Y);
-% % Z( Z> 730)=nan;
-% % X( Z> 730)=nan;
-% % Y( Z> 730)=nan;
-% h = surf(X, Y, Z,NoBGRectRight, ...  % Plot surface
-%          'FaceColor', 'texturemap', ...
-%          'EdgeColor', 'none');
-% ptCloudOut = pcmerge(ptCloudAligned, ptCloudRef, 1);
-% figure;pcshow(ptCloudOut);
-% ptCloudOut = pcdownsample(ptCloudOut, 'gridAverage', gridSize);
+ptCloudOut = pcdownsample(ptCloudOut, 'gridAverage', gridSize);
 x = double(ptCloudOut.Location(:,1));
 y = double(ptCloudOut.Location(:,2));
 z = double(ptCloudOut.Location(:,3));
 trimesh = delaunay(x,y);
-trimesh2 = delaunay(x,y,z);
 point1 = trimesh(:,1); % x,y,z 1
 point2 = trimesh(:,2); % x,y,z 2
 point3 = trimesh(:,3); % x,y,z 3
-% d = pdist2(x,y) ;
+% figure;triplot(trimesh,x,y);
 for c = 1:size(point1)
     A= [x(point1(c)),y(point1(c))];
     B= [x(point2(c)),y(point2(c))];
     C= [x(point3(c)),y(point3(c))];
-    if norm(A-B)>25
-        trimesh(c,:)=[nan nan nan];
-    end
-    if  norm(B-C)>25
-        trimesh(c,:)=[nan nan nan];
-    end
-    if  norm(A-C)>25
+    if norm(A-B)>25 || norm(B-C)>25 || norm(A-C)>25
         trimesh(c,:)=[nan nan nan];
     end
 end
 trimesh = rmmissing(trimesh);
-triplot(trimesh,x,y)
+figure;triplot(trimesh,x,y);
 surf = trisurf(trimesh,x,y,z);
 shading interp
 %% Create point cloud
