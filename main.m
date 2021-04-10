@@ -51,11 +51,11 @@ load params4
 [NoBGRectLeft, NoBGRectMiddleLeft] = rectifyStereoImages(removeBG(subjectLeft, 0),removeBG(subjectMiddle, 0),params3, 'OutputView','full');
 
 %Create the pointcloud using a disparity map and return unreliable points
-[ptCloud1, unreliables1]  = createPointcloud(rectMiddleRight, rectRight,params,240, 368, NoBGRectMiddleRight);
-[ptCloud2, unreliables2]  = createPointcloud(rectLeft,rectMiddleLeft,params3, 240, 368, NoBGRectLeft);
+[ptCloud1, unreliables1, disparityMap1, points3D1]  = createPointcloud(rectMiddleRight, rectRight,params,240, 368, NoBGRectMiddleRight);
+[ptCloud2, unreliables2, disparityMap2, points3D2]  = createPointcloud(rectLeft,rectMiddleLeft,params3, 240, 368, NoBGRectLeft);
 
-% figure; imshow(unreliables1);
-% figure; imshow(unreliables2);
+TR1 = create_3D_mesh(disparityMap1, points3D1, unreliables1, NoBGRectMiddleRight);
+TR2 = create_3D_mesh(disparityMap2, points3D2, unreliables2, NoBGRectLeft);
 
 %figure; pcshow(ptCloud1);
 %figure; pcshow(ptCloud2);
@@ -109,8 +109,56 @@ trimesh = rmmissing(trimesh);
 figure;triplot(trimesh,x,y);
 surf = trisurf(trimesh,x,y,z);
 shading interp
+
+function [TR]= create_3D_mesh(disparityMap, pc, unreliable, J1)
+%% create a connectivity structure
+    [M, N] = size(disparityMap);         % get image size
+    res = 2;                             % resolution of mesh
+    [nI,mI] = meshgrid(1:res:N,1:res:M); % create a 2D meshgrid of pixels, thus defining a resolution grid
+    TRI = delaunay(nI(:),mI(:));         % create a triangle connectivity list
+    indI = sub2ind([M,N],mI(:),nI(:));   % cast grid points to linear indices
+
+    %% linearize the arrays and adapt to chosen resolution
+    pcl = reshape(pc,N*M,3); % reshape to (N*M)x3
+    J1l = reshape(J1,N*M,3); % reshape to (N*M)x3
+    pcl = pcl(indI,:);       % select 3D points that are on resolution grid
+    J1l = J1l(indI,:);       % select pixels that are on the resolution grid
+
+    %% remove the unreliable points and the associated triangles
+    ind_unreliable = find(unreliable(indI));% get the linear indices of unreliable 3D points
+    imem = ismember(TRI(:),ind_unreliable); % find indices of references to unreliable points
+    [ir,~] = ind2sub(size(TRI),find(imem)); % get the indices of rows with refs to unreliable points.
+    TRI(ir,:) = [];              % dispose them
+    iused = unique(TRI(:));      % find the ind's of vertices that are in use
+    used = zeros(length(pcl),1); % pre-allocate
+    used(iused) = 1;             % create a map of used vertices
+    map2used = cumsum(used); % conversion table from indices of old vertices to the new one
+    pcl = pcl(iused,:);      % remove the unused vertices
+    J1l = J1l(iused,:);
+    TRI = map2used(TRI);     % update the ind's of vertices
+
+    %% create the 3D mesh
+    TR = triangulation(TRI,double(pcl)); % create the object
+
+    %% visualize
+    figure;
+    TM = trimesh(TR);              % plot the mesh
+    set(TM,'FaceVertexCData',J1l); % set colors to input image
+    set(TM,'Facecolor','interp');
+    % set(TM,'FaceColor','red');   % if you want a colored surface
+    set(TM,'EdgeColor','none');    % suppress the edges
+    xlabel('x (mm)')
+    ylabel('y (mm)')
+    zlabel('z (mm)')
+    axis([-250 250 -250 250 400 900])
+    set(gca,'xdir','reverse')
+    set(gca,'zdir','reverse')
+    daspect([1,1,1])
+    axis tight
+end
+
 %% Create point cloud
-function [ptCloud, unreliables] = createPointcloud(J1,J2,stereoParams,min,max, mask)
+function [ptCloud, unreliables, disparityMap, points3D] = createPointcloud(J1,J2,stereoParams,min,max, mask)
     J1Gray=rgb2gray(J1);
     J2Gray=rgb2gray(J2);
     %imtool(stereoAnaglyph(J1,J2));
@@ -123,29 +171,31 @@ function [ptCloud, unreliables] = createPointcloud(J1,J2,stereoParams,min,max, m
     mask = imbinarize(mask, 0);
     disparityMap = times(disparityMap, mask);
     
+    % Unreliables are set to nan by disparitySGM
+    % Replace NaN values to remove holes in the disparity map
+    disparityMap(isnan(disparityMap))= -realmax('single');
+    disparityMap = imfill(disparityMap,'holes');
+      
+    %remove outliers using median filter
+    disparityMap = medfilt2(disparityMap, [75,75]);
+    
     % Create array size of the disparity map and set all values to one
     unreliables = ones(size(disparityMap));
     %Set the usefull point to zero
     unreliables(find(disparityMap~=0)) = 0;
-    %unreliables are set to nan by disparitySGM
-    unreliables(find(isnan(disparityMap))) = 1;
-   
-    % Replace NaN values to remove holes in the disparity map
-    disparityMap(isnan(disparityMap))= -realmax('single');
-    disparityMap = imfill(disparityMap,'holes');
-    
-    %remove outliers using median filter
-    disparityMap = medfilt2(disparityMap, [75,75]);
+    unreliables(find(disparityMap==-realmax('single'))) = 1;
+    %unreliables(find(isnan(disparityMap))) = 1;
     
     %figure;
     %imshow(disparityMap,[min max]);
+    %imshow(unreliables);
     %title('Disparity Map');
     %colormap jet;
     %colorbar;
      
     points3D = reconstructScene(disparityMap, stereoParams);
     
-    ptCloud = pcdenoise(pointCloud(points3D, 'Color',  J1));
+    ptCloud = removeInvalidPoints(pcdenoise(pointCloud(points3D, 'Color',  J1)));
 end
 %% Calibrate Camera unused function
 function [params, tform, estimationErrors] = calibrateCamera(images1,images2,squareSize)
