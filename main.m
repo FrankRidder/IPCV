@@ -157,7 +157,6 @@ gridSize = 10;
 fixed = pcdownsample(ptCloudRef, 'gridAverage', gridSize);
 moving = pcdownsample(ptCloudCurrent, 'gridAverage', gridSize);
 tform = pcregistericp(moving, fixed, 'Metric','pointToPoint','Extrapolate', true);
-%figure; pcshow(fixed);
 
 %Adjust pointcloud using tform gotten using ICP
 ptCloudAligned = pctransform(ptCloudCurrent,tform);
@@ -286,7 +285,7 @@ function [removedBgImage] = removeBG(image, right)
     imageGrey = rgb2gray(imageNorm);
     
     %Use canny edge detection to get the edges of the person
-    utCanny = ut_edge(imageGrey, 'canny', 'sigma', 3, 'hysteresis', [0.06 0.005]);
+    utCanny = ut_edge(imageGrey, 'canny', 'sigma', 3, 'hysteresis', [0.06 0.01]);
     
     %Use dilation to connect the edges
     se = strel('diamond',1);
