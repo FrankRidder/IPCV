@@ -11,11 +11,11 @@ imagesCameraCalibrationRight = imageSet('pictures/calibration1/calibrationRight'
 %Subject 1,2 or 4
 subject = 4;
 %expression 1 to 5
-expression = 1;
+expression = 2;
 %Calibration set 1 seems to work better then the second
 calibration = 1;
 %Set as one when switching from images.
-recalibrate =0;
+recalibrate =1;
 
 %% Subject 1
 switch subject 
@@ -117,18 +117,18 @@ end
 switch subject 
     case 1
         %Create the pointcloud using a disparity map and return unreliable points
-        [ptCloud1, unreliables1, disparityMap1, points3D1]  = createPointcloud(rectMiddleRight, rectRight,params,240, 368, NoBGRectMiddleRight);
-        [ptCloud2, unreliables2, disparityMap2, points3D2]  = createPointcloud(rectLeft,rectMiddleLeft,params3, 240, 368, NoBGRectLeft);
+        [ptCloud1, unreliables1, disparityMap1, points3D1]  = createPointcloud(rectMiddleRight, rectRight,params,248, 376, NoBGRectMiddleRight);
+        [ptCloud2, unreliables2, disparityMap2, points3D2]  = createPointcloud(rectLeft,rectMiddleLeft,params3, 248, 376, NoBGRectLeft);
 
     case 2
         %Create the pointcloud using a disparity map and return unreliable points
-        [ptCloud1, unreliables1, disparityMap1, points3D1]  = createPointcloud(rectMiddleRight, rectRight,params,292 , 372, NoBGRectMiddleRight);
-        [ptCloud2, unreliables2, disparityMap2, points3D2]  = createPointcloud(rectLeft,rectMiddleLeft,params3, 302, 390, NoBGRectLeft);
+        [ptCloud1, unreliables1, disparityMap1, points3D1]  = createPointcloud(rectMiddleRight, rectRight,params,256 , 384, NoBGRectMiddleRight);
+        [ptCloud2, unreliables2, disparityMap2, points3D2]  = createPointcloud(rectLeft,rectMiddleLeft,params3, 256, 384, NoBGRectLeft);
 
     case 4
         %Create the pointcloud using a disparity map and return unreliable points
-        [ptCloud1, unreliables1, disparityMap1, points3D1]  = createPointcloud(rectMiddleRight, rectRight,params,388, 436, NoBGRectMiddleRight);
-        [ptCloud2, unreliables2, disparityMap2, points3D2]  = createPointcloud(rectLeft,rectMiddleLeft,params3, 366, 438, NoBGRectLeft);
+        [ptCloud1, unreliables1, disparityMap1, points3D1]  = createPointcloud(rectMiddleRight, rectRight,params,326, 454, NoBGRectMiddleRight);
+        [ptCloud2, unreliables2, disparityMap2, points3D2]  = createPointcloud(rectLeft,rectMiddleLeft,params3, 310, 438, NoBGRectLeft);
 end
 
 
@@ -156,7 +156,7 @@ figure; pcshow(ptCloudRef)
 gridSize = 10;
 fixed = pcdownsample(ptCloudRef, 'gridAverage', gridSize);
 moving = pcdownsample(ptCloudCurrent, 'gridAverage', gridSize);
-tform = pcregistericp(moving, fixed, 'Metric','pointToPoint','Extrapolate', true);
+tform = pcregistericp(moving, fixed, 'Metric','pointToPlane','Extrapolate', true);
 
 %Adjust pointcloud using tform gotten using ICP
 ptCloudAligned = pctransform(ptCloudCurrent,tform);
